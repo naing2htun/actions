@@ -1,0 +1,69 @@
+name: "Generate Bytebase rollout plan"
+description: "Generate Bytebase rollout plan for SQL migrations"
+
+inputs:
+  bytebase-url:
+    description: "Bytebase instance URL"
+    default: ""
+    required: true
+  bytebase-service-account:
+    description: "Bytebase service account email"
+    default: "bytebase@service.bytebase.com"
+    required: false
+  bytebase-service-account-secret:
+    description: "Bytebase service account secret"
+    default: ""
+    required: true
+  project:
+    description: "Bytebase project name e.g. [projects/latitude-demo]"
+    default: ""
+    required: true
+  targets:
+    description: "Bytebase comma-separated targets e.g. [instances/latitude-dev/databases/latitude-demo-dev,instances/latitude-qa/databases/latitude-demo-qa]"
+    default: ""
+    required: true
+  file-pattern:
+    description: "Bytebase glob for migration files"
+    default: "migrations/*.up.sql"
+    required: true
+
+outputs:
+  bytebase-plan:
+    description: "Bytebase rollout plan string (JSON)"
+    value: ${{ steps.set-output.outputs.plan }}
+  pr-title:
+    description: "Release title derived from commit message"
+    value: ${{ steps.get-pr-title.outputs.pr-title }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+    - name: Get commit message as title
+      id: get-pr-title
+      shell: bash
+      run: |
+        PR_TITLE="${{ github.event.head_commit.message || github.sha }}"
+        {
+          echo "pr-title<<EOF"
+          echo "$PR_TITLE"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
+        echo "Using title: $PR_TITLE"
+    - name: Generate rollout plan
+      shell: bash
+      run: |
+        bytebase-action rollout \
+          --url=${{ inputs.bytebase-url }} \
+          --project=${{ inputs.project }} \
+          --file-pattern="${{ inputs.file-pattern }}" \
+          --targets="${{ inputs.targets }}" \
+          --release-title="${{ steps.get-pr-title.outputs.pr-title }}" \
+          --output=${{ runner.temp }}/bytebase-metadata.json
+    - name: Set output
+      id: set-output
+      shell: bash
+      run: |
+        PLAN=$(jq -r .plan ${{ runner.temp }}/bytebase-metadata.json)
+        echo "plan=$PLAN" >> $GITHUB_OUTPUT
