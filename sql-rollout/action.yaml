@@ -26,6 +26,10 @@ inputs:
     description: "GitHub repository containing the SQL release workflow e.g. [naing2htun/latitude-demo]"
     default: ""
     required: true
+  access-token:
+    description: "Personal Access Token with repo and workflow scopes"
+    default: ""
+    required: true
 
 runs:
   using: "composite"
@@ -37,7 +41,7 @@ runs:
       shell: bash
       run: |
         RUN_ID=$(curl -s \
-          -H "Authorization: Bearer ${{ secrets.PAT }}" \
+          -H "Authorization: Bearer ${{ inputs.access-token }}" \
           -H "Accept: application/vnd.github+json" \
           "https://api.github.com/repos/${{ inputs.full-repo }}/actions/workflows/sql-plan.yaml/runs?status=success&branch=main" \
           | jq -r '.workflow_runs[0].id')
@@ -48,7 +52,7 @@ runs:
       uses: actions/download-artifact@v5
       with:
         name: bytebase-plan
-        github-token: ${{ secrets.PAT }}
+        github-token: ${{ inputs.access-token }}
         repository: ${{ inputs.full-repo }}
         run-id: ${{ steps.get-run.outputs.run-id }}
     - name: Rollout to ${{ inputs.target-stage }}
