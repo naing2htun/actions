@@ -1,4 +1,4 @@
-name: "Generate Bytebase rollout plan"
+name: "Generate rollout plan"
 description: "Generate Bytebase rollout plan for SQL migrations"
 
 inputs:
@@ -19,21 +19,13 @@ inputs:
     default: ""
     required: true
   targets:
-    description: "Bytebase comma-separated targets e.g. [instances/latitude-dev/databases/latitude-demo-dev,instances/latitude-qa/databases/latitude-demo-qa]"
+    description: "Bytebase comma-separated targets e.g. [instances/latitude-qa/databases/latitude-demo-qa,instances/latitude-stg/databases/latitude-demo-stg]"
     default: ""
     required: true
   file-pattern:
     description: "Bytebase glob for migration files"
     default: "migrations/*.up.sql"
     required: true
-
-outputs:
-  bytebase-plan:
-    description: "Bytebase rollout plan string (JSON)"
-    value: ${{ steps.set-output.outputs.plan }}
-  pr-title:
-    description: "Release title derived from commit message"
-    value: ${{ steps.get-pr-title.outputs.pr-title }}
 
 runs:
   using: "composite"
@@ -63,9 +55,14 @@ runs:
           --targets="${{ inputs.targets }}" \
           --release-title="${{ steps.get-pr-title.outputs.pr-title }}" \
           --output=${{ runner.temp }}/bytebase-metadata.json
-    - name: Set output
-      id: set-output
+    - name: Extract plan to file
+      id: extract-plan
       shell: bash
       run: |
-        PLAN=$(jq -r .plan ${{ runner.temp }}/bytebase-metadata.json)
-        echo "plan=$PLAN" >> $GITHUB_OUTPUT
+        jq -r .plan ${{ runner.temp }}/bytebase-metadata.json) > ${{ github.workspace }}/plan.txt
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: bytebase-plan
+        path: ${{ github.workspace }}/plan.txt
+        overwrite: true
