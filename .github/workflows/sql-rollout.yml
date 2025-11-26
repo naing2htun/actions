@@ -1,0 +1,101 @@
+name: "Rollout Bytebase generated plan"
+
+on:
+  workflow_call:
+    inputs:
+      bytebase-url:
+        description: "Bytebase instance URL"
+        required: true
+        type: string
+      bytebase-service-account:
+        description: "Bytebase service account email"
+        default: "bytebase@service.bytebase.com"
+        required: true
+        type: string
+      bytebase-service-account-secret:
+        description: "Bytebase service account secret"
+        required: true
+        type: string
+      project:
+        description: "Bytebase project name e.g. [projects/latitude-demo]"
+        required: true
+        type: string
+      target-stage:
+        description: "Bytebase target stage e.g. [environments/qa]"
+        required: true
+        type: string
+      full-repo:
+        description: "GitHub repository containing the SQL release workflow e.g. [naing2htun/latitude-demo]"
+        required: true
+        type: string
+      access-token:
+        description: "Personal Access Token with repo and workflow scopes"
+        required: true
+        type: string
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v47
+        with:
+          dir_names: "false"
+          files_yaml: |
+            sql:
+              - "*.up.sql"
+
+      - name: Get run ID of latest successful run
+        id: get-run
+        run: |
+          RUN_ID=$(curl -s \
+            -H "Authorization: Bearer ${{ inputs.access-token }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ inputs.full-repo }}/actions/workflows/sql-plan.yaml/runs?status=success&branch=main" \
+            | jq -r '.workflow_runs[0].id')
+
+          echo "run-id=$RUN_ID" >> $GITHUB_OUTPUT
+
+      - name: Download rollout plan artifact
+        id: download-artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: bytebase-plan
+          github-token: ${{ inputs.access-token }}
+          repository: ${{ inputs.full-repo }}
+          run-id: ${{ steps.get-run.outputs.run-id }}
+
+      - name: Upload plan for rollout job
+        uses: actions/upload-artifact@v4
+        with:
+          name: rollout-plan-${{ github.run_id }}
+          path: ${{ steps.download-artifact.outputs.download-path }}/plan.txt
+          retention-days: 1
+
+  rollout:
+    needs: prepare
+    runs-on: ubuntu-latest
+    container:
+      image: bytebase/bytebase-action:${{ vars.BYTEBASE_ACTION_VERSION }}
+    steps:
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: rollout-plan-${{ github.run_id }}
+          path: /tmp
+
+      - name: Rollout to ${{ inputs.target-stage }}
+        run: |
+          bytebase-action rollout \
+            --url=${{ inputs.bytebase-url }} \
+            --service-account=${{ inputs.bytebase-service-account }} \
+            --service-account-secret='${{ inputs.bytebase-service-account-secret }}' \
+            --project=${{ inputs.project }} \
+            --target-stage=${{ inputs.target-stage }} \
+            --plan=$(cat /tmp/plan.txt)
