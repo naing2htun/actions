@@ -52,7 +52,7 @@ jobs:
           bytebase-action rollout \
             --url=${{ inputs.bytebase-url }} \
             --service-account=${{ inputs.bytebase-service-account }} \
-            --service-account-secret=${{ inputs.bytebase-service-account-secret }} \
+            --service-account-secret=${{ secrets.bytebase-service-account-secret }} \
             --project=${{ inputs.project }} \
             --file-pattern="${{ inputs.file-pattern }}" \
             --targets="${{ inputs.targets }}" \
