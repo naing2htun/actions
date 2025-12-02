@@ -12,18 +12,6 @@ on:
         default: "bytebase@service.bytebase.com"
         required: true
         type: string
-      project:
-        description: "Bytebase project name e.g. [projects/latitude-demo]"
-        required: true
-        type: string
-      target-stage:
-        description: "Bytebase target stage e.g. [environments/qa]"
-        required: true
-        type: string
-      full-repo:
-        description: "GitHub repository containing the SQL release workflow e.g. [naing2htun/latitude-demo]"
-        required: true
-        type: string
     secrets:
       bytebase-service-account-secret:
         description: "Bytebase service account secret"
@@ -35,6 +23,10 @@ on:
 jobs:
   prepare:
     runs-on: ubuntu-latest
+    outputs:
+      env: ${{ steps.extract-info.outputs.env }}
+      dir: ${{ steps.extract-info.outputs.dir }}
+      service: ${{ steps.extract-info.outputs.service }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -49,6 +41,34 @@ jobs:
           files_yaml: |
             sql:
               - "*.up.sql"
+      - name: Log changed files
+        run: |
+          echo "Changed SQL files:"
+          echo "${{ steps.changed-files.outputs.sql }}" | tr ',' '\n'
+
+      - name: Extract service and environment info
+        id: extract-info
+        run: |
+          SQL_FILES="${{ steps.changed-files.outputs.sql_all_changed_files }}"
+          if [ -z "$SQL_FILES" ]; then
+            SQL_FILES="${{ steps.changed-files.outputs.sql_other_changed_files }}"
+          fi
+          if [ -z "$SQL_FILES" ]; then
+            SQL_FILES="${{ steps.changed-files.outputs.sql_other_modified_files }}"
+          fi
+
+          if [ -n "$SQL_FILES" ]; then
+            DIR=$(echo "$SQL_FILES" | tr ' ' '\n' | grep '\.sql$' | xargs -n1 dirname | head -n1)
+            SERVICE=$(cut -d'/' -f1 <<<"$DIR")
+            ENV=$(cut -d'/' -f3 <<<"$DIR")
+            echo "env=$ENV" >> $GITHUB_OUTPUT
+            echo "dir=$DIR" >> $GITHUB_OUTPUT
+            echo "service=$SERVICE" >> $GITHUB_OUTPUT
+            echo "Detected service: $SERVICE, env: $ENV from dir: $DIR"
+          else
+            echo "No SQL files changed"
+            echo -e "service=\nenv=" >> $GITHUB_OUTPUT
+          fi
 
       - name: Get run ID of latest successful run
         id: get-run
@@ -56,7 +76,7 @@ jobs:
           RUN_ID=$(curl -s \
             -H "Authorization: Bearer ${{ secrets.access-token }}" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ inputs.full-repo }}/actions/workflows/sql-plan.yaml/runs?status=success&branch=main" \
+            "https://api.github.com/repos/naing2htun/${{ steps.extract-info.outputs.service }}/actions/workflows/sql-plan.yaml/runs?status=success&branch=main" \
             | jq -r '.workflow_runs[0].id')
 
           echo "run-id=$RUN_ID" >> $GITHUB_OUTPUT
@@ -67,7 +87,7 @@ jobs:
         with:
           name: bytebase-plan
           github-token: ${{ secrets.access-token }}
-          repository: ${{ inputs.full-repo }}
+          repository: naing2htun/${{ steps.extract-info.outputs.service }}
           run-id: ${{ steps.get-run.outputs.run-id }}
 
       - name: Upload plan for rollout job
@@ -89,12 +109,12 @@ jobs:
           name: rollout-plan-${{ github.run_id }}
           path: /tmp
 
-      - name: Rollout to ${{ inputs.target-stage }}
+      - name: Rollout to ${{ needs.prepare.outputs.env }}
         run: |
           bytebase-action rollout \
             --url=${{ inputs.bytebase-url }} \
             --service-account=${{ inputs.bytebase-service-account }} \
             --service-account-secret='${{ secrets.bytebase-service-account-secret }}' \
-            --project=${{ inputs.project }} \
-            --target-stage=${{ inputs.target-stage }} \
+            --project=projects/${{ needs.prepare.outputs.service }} \
+            --target-stage=environments/${{ needs.prepare.outputs.env }} \
             --plan=$(cat /tmp/plan.txt)
