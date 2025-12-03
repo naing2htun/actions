@@ -24,11 +24,6 @@ jobs:
       matrix:
         environment: ${{ fromJson(inputs.environments) }}
 
-    permissions:
-      contents: read
-      # Needed for creating PRs
-      pull-requests: write
-
     env:
       TARGET_DIR: ${{ github.repository }}/overlays/${{ matrix.environment }}/migrations
       GIT_AUTHOR_NAME: migration-bot
