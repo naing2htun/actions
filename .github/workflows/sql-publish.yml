@@ -1,0 +1,108 @@
+name: Publish migrations to deployment repo
+
+on:
+  workflow_call:
+    inputs:
+      deployment-repo:
+        description: 'Target deployment repository (owner/repo)'
+        required: true
+        type: string
+      environments:
+        description: 'Comma-separated list of environments to deploy to'
+        required: false
+        type: string
+        default: '["qa", "stg"]'
+    secrets:
+      deployment-token:
+        description: 'Token with access to deployment repository'
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: ${{ fromJson(inputs.environments) }}
+
+    permissions:
+      contents: read
+      # Needed for creating PRs
+      pull-requests: write
+
+    env:
+      TARGET_DIR: ${{ github.repository }}/overlays/${{ matrix.environment }}/migrations
+      GIT_AUTHOR_NAME: migration-bot
+      GIT_AUTHOR_EMAIL: migration-bot@users.noreply.github.com
+
+    steps:
+      - name: Check out service repo
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          path: service
+
+      - name: Find SQL files
+        run: |
+          # Get all filenames under migrations folder without path
+          find ${GITHUB_WORKSPACE}/service/migrations -name "*.up.sql" -type f -exec basename {} \; > $RUNNER_TEMP/all_migrations.txt || true
+
+          echo "All migration files:"
+          cat $RUNNER_TEMP/all_migrations.txt
+
+      - name: Clone deployment repo
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ inputs.deployment-repo }}
+          token: ${{ secrets.deployment-token }}
+          fetch-depth: 1 # only need latest commit for faster clone
+          path: deployment
+
+      - name: Create empty migration files in deployment repo
+        run: |
+          cd ${GITHUB_WORKSPACE}/deployment
+          mkdir -p "${TARGET_DIR}"
+
+          # Read changed files and create empty files with just the basename
+          if [ -s $RUNNER_TEMP/all_migrations.txt ]; then
+            while IFS= read -r filepath; do
+              filename=$(basename "$filepath")
+              touch "${{ env.TARGET_DIR }}/$filename"
+              echo "Created empty file: ${{ env.TARGET_DIR }}/$filename"
+            done < $RUNNER_TEMP/all_migrations.txt
+          else
+            echo "No migration files to create"
+          fi
+
+          # Commit and push
+          git add "${TARGET_DIR}/"*.sql
+          git status
+          # Don't need to push, PR action peter-evans/create-pull-request will handle it
+
+      - name: Create Pull Request
+        id: create-pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          path: deployment
+          token: ${{ secrets.deployment-token }}
+          branch: migrations/${{ github.repository }}-${{ matrix.environment }}-${{ github.run_id }}
+          commit-message: "chore(db): publish ${{ github.repository }} migrations to ${{ matrix.environment }}"
+          title: "chore(db): publish ${{ github.repository }} migrations to ${{ matrix.environment }}"
+          body: |
+            This PR publishes new DB migrations for **${{ github.repository }}** to **${{ matrix.environment }}** environment
+
+            - **Service**: [${{ github.repository }}](https://github.com/${{ github.repository }}).
+            - **Commit**: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }}).
+            - **Environment**: ${{ matrix.environment }}
+            - **Target Path**: ${{ env.TARGET_DIR }}
+
+            Merging this PR will trigger Bytebase to rollout the migrations to the target database(s).
+          base: main
+          labels: db-migration,${{ matrix.environment }},${{ github.repository }}
+          author: ${{ env.GIT_AUTHOR_NAME }} <${{ env.GIT_AUTHOR_EMAIL }}>
+          committer: ${{ env.GIT_AUTHOR_NAME }} <${{ env.GIT_AUTHOR_EMAIL }}>
+          assignees: ${{ github.actor }}
+          delete-branch: true
+
+      - name: PR Summary
+        run: |
+          echo "Created PR: ${{ steps.create-pr.outputs.pull-request-url }}" >> $GITHUB_STEP_SUMMARY
