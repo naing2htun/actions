@@ -25,7 +25,7 @@ jobs:
         environment: ${{ fromJson(inputs.environments) }}
 
     env:
-      TARGET_DIR: ${{ github.repository }}/overlays/${{ matrix.environment }}/migrations
+      TARGET_DIR: ${{ github.event.repository.name }}/overlays/${{ matrix.environment }}/migrations
       GIT_AUTHOR_NAME: migration-bot
       GIT_AUTHOR_EMAIL: migration-bot@users.noreply.github.com
 
