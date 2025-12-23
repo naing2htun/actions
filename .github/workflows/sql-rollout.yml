@@ -77,21 +77,12 @@ jobs:
 
           echo "run-id=$RUN_ID" >> $GITHUB_OUTPUT
 
-      - name: Download rollout plan artifact
-        id: download-artifact
-        uses: actions/download-artifact@v5
-        with:
-          name: bytebase-plan
-          github-token: ${{ secrets.access-token }}
-          repository: naing2htun/${{ steps.extract-info.outputs.service }}
-          run-id: ${{ steps.get-run.outputs.run-id }}
-
       - name: Upload plan for rollout job
         uses: actions/upload-artifact@v4
         with:
           name: rollout-plan-${{ github.run_id }}
-          path: ${{ steps.download-artifact.outputs.download-path }}/plan.txt
-          retention-days: 1
+          path: plan.txt
+          retention-days: 7
 
   rollout:
     needs: prepare
@@ -100,7 +91,7 @@ jobs:
       image: bytebase/bytebase-action:${{ vars.BYTEBASE_ACTION_VERSION }}
     steps:
       - name: Download plan
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: rollout-plan-${{ github.run_id }}
           path: /tmp

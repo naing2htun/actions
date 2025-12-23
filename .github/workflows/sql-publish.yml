@@ -79,20 +79,20 @@ jobs:
         with:
           path: deployment
           token: ${{ secrets.deployment-token }}
-          branch: migrations/${{ github.repository }}-${{ matrix.environment }}-${{ github.run_id }}
-          commit-message: "chore(db): publish ${{ github.repository }} migrations to ${{ matrix.environment }}"
-          title: "chore(db): publish ${{ github.repository }} migrations to ${{ matrix.environment }}"
+          branch: migrations/${{ github.event.repository.name }}-${{ matrix.environment }}-${{ github.run_id }}
+          commit-message: "chore(db): publish ${{ github.event.repository.name }} migrations to ${{ matrix.environment }}"
+          title: "chore(db): publish ${{  github.event.repository.name }} migrations to ${{ matrix.environment }}"
           body: |
-            This PR publishes new DB migrations for **${{ github.repository }}** to **${{ matrix.environment }}** environment
+            This PR publishes new DB migrations for **${{ github.event.repository.name }}** to **${{ matrix.environment }}** environment
 
-            - **Service**: [${{ github.repository }}](https://github.com/${{ github.repository }}).
+            - **Service**: [${{ github.event.repository.name }}](https://github.com/${{ github.repository }}).
             - **Commit**: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }}).
             - **Environment**: ${{ matrix.environment }}
             - **Target Path**: ${{ env.TARGET_DIR }}
 
             Merging this PR will trigger Bytebase to rollout the migrations to the target database(s).
           base: main
-          labels: db-migration,${{ matrix.environment }},${{ github.repository }}
+          labels: database,${{ matrix.environment }},${{ github.event.repository.name }}
           author: ${{ env.GIT_AUTHOR_NAME }} <${{ env.GIT_AUTHOR_EMAIL }}>
           committer: ${{ env.GIT_AUTHOR_NAME }} <${{ env.GIT_AUTHOR_EMAIL }}>
           assignees: ${{ github.actor }}
