@@ -1,0 +1,59 @@
+name: Promote to Production
+
+on:
+  workflow_call:
+    inputs:
+      stage-environment:
+        description: 'Stage environment name'
+        required: false
+        type: string
+        default: 'stg'
+    secrets:
+      service-repo-token:
+        description: 'Token with access to trigger workflows in service repositories'
+        required: true
+
+jobs:
+  trigger-prod-promotion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deployment repo
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v47
+        with:
+          files_yaml: |
+            sql:
+              - "*/overlays/${{ inputs.stage-environment }}/migrations/*.up.sql"
+
+      - name: Extract service info
+        id: extract-info
+        run: |
+          SQL_FILES="${{ steps.changed-files.outputs.sql_all_changed_files }}"
+          if [ -n "$SQL_FILES" ]; then
+            DIR=$(echo "$SQL_FILES" | tr ' ' '\n' | grep '\.sql$' | xargs -n1 dirname | head -n1)
+            SERVICE=$(cut -d'/' -f1 <<<"$DIR")
+            echo "service=$SERVICE" >> $GITHUB_OUTPUT
+            echo "Detected service: $SERVICE for production promotion"
+          else
+            echo "No ${{ inputs.stage-environment }} SQL files changed"
+            exit 0
+          fi
+
+      - name: Trigger production promotion in service repo
+        if: steps.extract-info.outputs.service
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.service-repo-token }}
+          repository: naing2htun/${{ steps.extract-info.outputs.service }}
+          event-type: promote-to-production
+          client-payload: |
+            {
+              "triggered_by": "${{ github.actor }}",
+              "commit_sha": "${{ github.sha }}",
+              "service": "${{ steps.extract-info.outputs.service }}"
+            }
