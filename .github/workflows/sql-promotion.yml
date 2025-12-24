@@ -8,6 +8,10 @@ on:
         required: false
         type: string
         default: 'stg'
+    secrets:
+      service-repo-token:
+        description: 'Token with access to trigger workflows in service repositories'
+        required: true
 
 jobs:
   trigger-prod-promotion:
@@ -44,6 +48,7 @@ jobs:
         if: steps.extract-info.outputs.service
         uses: peter-evans/repository-dispatch@v3
         with:
+          token: ${{ secrets.service-repo-token }}
           repository: naing2htun/${{ steps.extract-info.outputs.service }}
           event-type: promote-to-production
           client-payload: |
