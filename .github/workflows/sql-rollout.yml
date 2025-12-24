@@ -77,12 +77,12 @@ jobs:
 
           echo "run-id=$RUN_ID" >> $GITHUB_OUTPUT
 
-      - name: Upload plan for rollout job
-        uses: actions/upload-artifact@v4
-        with:
-          name: rollout-plan-${{ github.run_id }}
-          path: plan.txt
-          retention-days: 7
+      # - name: Upload plan for rollout job
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: rollout-plan-${{ github.run_id }}
+      #     path: plan.txt
+      #     retention-days: 7
 
   rollout:
     needs: prepare
@@ -93,7 +93,7 @@ jobs:
       - name: Download plan
         uses: actions/download-artifact@v5
         with:
-          name: rollout-plan-${{ github.run_id }}
+          name: bytebase-plan
           path: /tmp
 
       - name: Rollout to ${{ needs.prepare.outputs.env }}
