@@ -23,6 +23,10 @@ on:
         description: "Bytebase glob for migration files"
         required: true
         type: string
+      plan-type:
+        description: "Plan type identifier (e.g., nonprod, prod)"
+        required: true
+        type: string
     secrets:
       bytebase-service-account-secret:
         description: "Bytebase service account secret"
@@ -66,6 +70,6 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: bytebase-plan
+          name: bytebase-plan-${{ inputs.plan-type }}
           path: ${{ github.workspace }}/plan.txt
           overwrite: true

@@ -12,6 +12,11 @@ on:
         default: "bytebase@service.bytebase.com"
         required: true
         type: string
+      plan-type:
+        description: "Plan type identifier (e.g., nonprod, prod)"
+        default: "nonprod"
+        required: true
+        type: string
     secrets:
       bytebase-service-account-secret:
         description: "Bytebase service account secret"
@@ -82,7 +87,7 @@ jobs:
         id: download-artifact
         uses: actions/download-artifact@v5
         with:
-          name: bytebase-plan
+          name: bytebase-plan-${{ inputs.plan-type }}
           github-token: ${{ secrets.access-token }}
           repository: naing2htun/${{ steps.extract-info.outputs.service }}
           run-id: ${{ steps.get-run.outputs.run-id }}
