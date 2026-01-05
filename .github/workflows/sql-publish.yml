@@ -73,6 +73,30 @@ jobs:
           git status
           # Don't need to push, PR action peter-evans/create-pull-request will handle it
 
+      - name: Close previous migration PRs
+        env:
+          GH_TOKEN: ${{ secrets.deployment-token }}
+        run: |
+          cd ${GITHUB_WORKSPACE}/deployment
+
+          # Search for open PRs with the same labels (database, environment, service name)
+          echo "Searching for existing open PRs..."
+          open_prs=$(gh pr list --state open --label "database,${{ matrix.environment }},${{ github.event.repository.name }}" --json number,title,url || echo "[]")
+
+          if [ "$open_prs" != "[]" ] && [ -n "$open_prs" ]; then
+            echo "Found existing open PRs:"
+            echo "$open_prs" | jq -r '.[] | "PR #\(.number): \(.title) (\(.url))"'
+
+            # Close each PR
+            echo "$open_prs" | jq -r '.[].number' | while read pr_number; do
+              echo "Closing PR #$pr_number..."
+              gh pr close "$pr_number" --comment "Closing this PR as a newer migration PR is being created."
+              echo "Closed PR #$pr_number"
+            done
+          else
+            echo "No existing open PRs found with labels: database,${{ matrix.environment }},${{ github.event.repository.name }}"
+          fi
+
       - name: Create Pull Request
         id: create-pr
         uses: peter-evans/create-pull-request@v7
